@@ -22,17 +22,18 @@ body {
 header, section {
   padding:15px; margin:10px;
   background:rgba(255,255,255,0.85);
-  border-radius:10px; backdrop-filter:blur(5px);
+  border-radius:10px; backdrop-filter:blur(6px);
 }
 table { width:100%; border-collapse:collapse; margin-top:10px;}
 th,td { border:1px solid #aaa; padding:6px; text-align:center;}
-input, select { width:100%; padding:5px; margin:2px 0;}
+input { width:100%; padding:5px; text-align:center; border:none; background:#f8f8f8; }
+input:focus { background:#e0ffe0; outline:2px solid #66a6ff; }
 button {
-  padding:6px 12px; margin:4px;
+  padding:8px 15px; margin:4px;
   border:none; border-radius:6px;
-  background:#66a6ff; color:#fff; cursor:pointer; font-weight:bold;
+  background:#007bff; color:#fff; cursor:pointer; font-weight:bold;
 }
-button:hover { background:#89f7fe; color:#000;}
+button:hover { background:#66a6ff; color:#000;}
 #saveMsg { color:green; font-weight:bold; display:none; }
 </style>
 </head>
@@ -50,66 +51,74 @@ button:hover { background:#89f7fe; color:#000;}
 </thead>
 <tbody></tbody>
 </table>
+
 <div style="text-align:right;">
-  <button onclick="saveStock()">💾 Update Stock Sheet</button>
+  <button onclick="saveStock()">💾 Update Stock</button>
   <span id="saveMsg">✅ Saved successfully!</span>
 </div>
 </section>
 
 <script>
-const STOCK_API = "https://sheetdb.io/api/v1/2y1u7hp9ykzlq"; // Base API
+const STOCK_API = "https://sheetdb.io/api/v1/2y1u7hp9ykzlq?sheet=Stock";
 let stockData = [];
 
+// --- Load Data ---
+async function loadData() {
+  try {
+    const res = await fetch(STOCK_API);
+    const json = await res.json();
+    stockData = json.map(r => ({
+      Item: r.Item,
+      Added: +r.Added || 0,
+      Delivered: +r.Delivered || 0,
+      Available: +r.Available || 0
+    }));
+    renderStock();
+  } catch (err) {
+    console.error(err);
+    alert("❌ Failed to load data. Check your API or SheetDB link.");
+  }
+}
+
 // --- Render Stock ---
-function renderStock(){
-  const tbody = document.querySelector('#stockTable tbody');
-  tbody.innerHTML='';
-  stockData.forEach((r,i)=>{
-    const tr = document.createElement('tr');
-    tr.innerHTML=`
-      <td>${i+1}</td>
+function renderStock() {
+  const tbody = document.querySelector("#stockTable tbody");
+  tbody.innerHTML = "";
+  stockData.forEach((r, i) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${i + 1}</td>
       <td>${r.Item}</td>
       <td><input type="number" value="${r.Added}" onchange="stockData[${i}].Added=this.value"></td>
       <td>${r.Delivered}</td>
-      <td>${r.Available}</td>`;
+      <td>${r.Available}</td>
+    `;
     tbody.appendChild(tr);
   });
 }
 
-// --- Load Data ---
-async function loadData(){
-  try{
-    const sRes = await fetch(STOCK_API + "?sheet=Stock");
-    const sJson = await sRes.json();
-    stockData = sJson.map(r=>({
-      Item:r.Item,
-      Added:+r.Added||0,
-      Delivered:+r.Delivered||0,
-      Available:+r.Available||0
-    }));
-    renderStock();
-  }catch(err){console.error(err);}
-}
-
-// --- Save (PATCH each row) ---
-async function saveStock(){
+// --- Save Changes (PATCH each row by Item) ---
+async function saveStock() {
   try {
-    for(const s of stockData){
-      const url = `${STOCK_API}/Item/${encodeURIComponent(s.Item)}?sheet=Stock`;
-      const payload = { data: { Added:s.Added, Delivered:s.Delivered, Available:s.Available }};
+    for (const s of stockData) {
+      const url = `https://sheetdb.io/api/v1/2y1u7hp9ykzlq/Item/${encodeURIComponent(s.Item)}?sheet=Stock`;
+      const payload = { data: { Added: s.Added, Delivered: s.Delivered, Available: s.Available } };
       await fetch(url, {
         method: "PATCH",
-        headers: {"Content-Type":"application/json"},
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
     }
-    const msg=document.getElementById('saveMsg');
-    msg.style.display='inline';
-    setTimeout(()=>msg.style.display='none',2000);
-  } catch(err){ console.error(err); alert("❌ Failed to save."); }
+    const msg = document.getElementById("saveMsg");
+    msg.style.display = "inline";
+    setTimeout(() => (msg.style.display = "none"), 2500);
+  } catch (err) {
+    console.error(err);
+    alert("❌ Failed to save. Make sure 'Item' is set as unique key in SheetDB settings.");
+  }
 }
 
-// Load when page opens
+// Load data when page opens
 loadData();
 </script>
 </body>
