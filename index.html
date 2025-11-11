@@ -7,7 +7,8 @@
 <style>
 :root { --blue1:#89f7fe; --blue2:#66a6ff; }
 body {
-  font-family:sans-serif; margin:0; padding:0;
+  font-family:sans-serif;
+  margin:0; padding:0;
   background:linear-gradient(120deg,var(--blue1),var(--blue2));
   background-size:400% 400%;
   animation: gradientBG 15s ease infinite;
@@ -24,19 +25,22 @@ header, section {
   border-radius:10px; backdrop-filter:blur(5px);
 }
 table { width:100%; border-collapse:collapse; margin-top:10px;}
-th,td { border:1px solid #aaa; padding:5px; text-align:center;}
+th,td { border:1px solid #aaa; padding:6px; text-align:center;}
 input, select { width:100%; padding:5px; margin:2px 0;}
 button {
-  padding:5px 10px; margin:2px;
-  border:none; border-radius:5px;
-  background:#66a6ff; color:#fff; cursor:pointer;
+  padding:6px 12px; margin:4px;
+  border:none; border-radius:6px;
+  background:#66a6ff; color:#fff; cursor:pointer; font-weight:bold;
 }
 button:hover { background:#89f7fe; color:#000;}
+#saveMsg { color:green; font-weight:bold; display:none; }
 </style>
 </head>
 <body>
 
-<header><h1>Uniform Stock Manager</h1></header>
+<header>
+  <h1>Uniform Stock Manager</h1>
+</header>
 
 <section>
 <h2>Stock Summary</h2>
@@ -46,6 +50,10 @@ button:hover { background:#89f7fe; color:#000;}
 </thead>
 <tbody></tbody>
 </table>
+<div style="text-align:right;">
+  <button onclick="saveStock()">💾 Update Stock Sheet</button>
+  <span id="saveMsg">✅ Saved successfully!</span>
+</div>
 </section>
 
 <section>
@@ -79,7 +87,8 @@ let transactions = [];
 // --- Update Available Stock ---
 function updateAvailable(){
   stockData.forEach(item=>{
-    const delivered = transactions.filter(t=>t.Item===item.Item).reduce((sum,t)=>sum+t.Qty,0);
+    const delivered = transactions.filter(t=>t.Item===item.Item)
+      .reduce((sum,t)=>sum+t.Qty,0);
     item.Delivered = delivered;
     item.Available = (item.Added||0) - delivered;
   });
@@ -94,37 +103,12 @@ function renderStock(){
     tr.innerHTML=`
       <td>${i+1}</td>
       <td>${r.Item}</td>
-      <td><input type="number" value="${r.Added}" 
-        onchange="updateAdded(${i}, this.value)"></td>
+      <td><input type="number" value="${r.Added}" onchange="stockData[${i}].Added=+this.value"></td>
       <td>${r.Delivered}</td>
       <td>${r.Available}</td>`;
     tbody.appendChild(tr);
   });
   renderItemSelect();
-}
-
-// --- When Added Quantity Changes ---
-async function updateAdded(index, value){
-  const row = stockData[index];
-  row.Added = parseInt(value)||0;
-  updateAvailable();
-  renderStock();
-
-  try {
-    // Save only that row to the sheet
-    await fetch(`${STOCK_API}/Item/${encodeURIComponent(row.Item)}`, {
-      method: "PATCH",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({
-        Added: row.Added,
-        Delivered: row.Delivered,
-        Available: row.Available
-      })
-    });
-    console.log("✅ Updated:", row.Item);
-  } catch(err){
-    console.error("❌ Failed to update row:", err);
-  }
 }
 
 // --- Render Item Select ---
@@ -192,7 +176,26 @@ async function deleteTransaction(index){
   });
 }
 
-// --- Load Everything ---
+// --- Save Stock (PUT update) ---
+async function saveStock(){
+  try {
+    updateAvailable();
+    const payload = {data: stockData.map(r=>({
+      Item:r.Item, Added:+r.Added, Delivered:r.Delivered, Available:r.Available
+    }))};
+    const res = await fetch(STOCK_API,{
+      method:"PUT", headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(payload)
+    });
+    if(res.ok){
+      const msg=document.getElementById('saveMsg');
+      msg.style.display='inline';
+      setTimeout(()=>msg.style.display='none',2000);
+    }else alert("❌ Failed to save.");
+  }catch(err){console.error(err);}
+}
+
+// --- Load All Data ---
 async function loadData(){
   try{
     const sRes = await fetch(STOCK_API);
@@ -212,7 +215,7 @@ async function loadData(){
     updateAvailable();
     renderStock();
     renderTransactions();
-  } catch(err){ console.error(err); }
+  }catch(err){console.error(err);}
 }
 
 loadData();
