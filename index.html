@@ -5,46 +5,51 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Uniform Stock Manager</title>
 <style>
-:root {
-  --blue1: #89f7fe;
-  --blue2: #66a6ff;
-  --text: #333;
-}
-body {
-  font-family: sans-serif;
-  margin:0;
-  padding:0;
-  background: linear-gradient(120deg, var(--blue1), var(--blue2));
-  background-size: 400% 400%;
-  animation: gradientBG 15s ease infinite;
-  color: var(--text);
-}
-@keyframes gradientBG{
-  0%{background-position:0% 50%}
-  50%{background-position:100% 50%}
-  100%{background-position:0% 50%}
-}
-header, section { padding: 20px; }
-h1,h2 { margin: 0 0 10px 0; text-align: center; }
-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-th, td { border: 1px solid #aaa; padding: 8px; text-align: center; }
-input { width: 80px; padding: 5px; }
-button { padding: 5px 10px; margin: 2px; cursor:pointer; border:none; border-radius:5px; background:#66a6ff; color:#fff; font-weight:600; transition:.3s;}
-button:hover{ background:#89f7fe; color:#000; }
+:root { --blue1:#89f7fe; --blue2:#66a6ff; --text:#333; }
+body { font-family: sans-serif; margin:0; padding:0; background: linear-gradient(120deg,var(--blue1),var(--blue2)); background-size:400% 400%; animation: gradientBG 15s ease infinite; color: var(--text);}
+@keyframes gradientBG{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+header, section { padding: 15px 20px; background: rgba(255,255,255,0.85); backdrop-filter: blur(5px); margin:10px; border-radius:12px; }
+h1,h2 { margin:0 0 10px 0; }
+table { width: 100%; border-collapse: collapse; margin-top:10px; }
+th, td { border:1px solid #aaa; padding:5px; text-align:center; }
+input, select { width:100%; padding:5px; margin:2px 0; }
+button { padding:5px 10px; margin:2px; cursor:pointer; border:none; border-radius:5px; background: var(--blue2); color:#fff; transition:0.3s; }
+button:hover { background: var(--blue1); color:#000; }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>Uniform Stock Manager</h1>
+<h1>Uniform Stock Manager</h1>
 </header>
 
 <section id="stockSection">
 <h2>Stock Summary</h2>
-<button onclick="saveStock()">💾 Save Changes</button>
 <table id="stockTable">
 <thead>
-<tr><th>Item</th><th>Added</th><th>Delivered</th><th>Available</th></tr>
+<tr><th>RowNum</th><th>Item</th><th>Added</th><th>Delivered</th><th>Available</th></tr>
+</thead>
+<tbody></tbody>
+</table>
+<button onclick="saveStock()">💾 Save Stock Changes</button>
+</section>
+
+<section id="transactionSection">
+<h2>Transactions</h2>
+<form id="entryForm">
+<input type="text" id="iqama" placeholder="Iqama" required>
+<input type="text" id="emp" placeholder="Employee Name" required>
+<input type="date" id="date" required>
+<select id="itemSelect"></select>
+<input type="number" id="qty" placeholder="Quantity" required min="1">
+<input type="text" id="client" placeholder="Client">
+<input type="text" id="note" placeholder="Note">
+<button type="submit">Add Transaction</button>
+</form>
+
+<table id="transTable">
+<thead>
+<tr><th>RowNum</th><th>Iqama</th><th>Name</th><th>Date</th><th>Item</th><th>Qty</th><th>Client</th><th>Note</th><th>Action</th></tr>
 </thead>
 <tbody></tbody>
 </table>
@@ -57,12 +62,12 @@ const TRAN_API = "https://sheetdb.io/api/v1/2y1u7hp9ykzlq?sheet=Transactions";
 let stockData = [];
 let transactions = [];
 
-// --- Update Delivered and Available ---
+// --- Update Available Stock ---
 function updateAvailable() {
   stockData.forEach(item => {
-    const delivered = transactions.filter(t => t.Item === item.Item).reduce((sum,t)=>sum + t.Qty, 0);
+    const delivered = transactions.filter(t => t.Item === item.Item).reduce((sum,t)=>sum+t.Qty,0);
     item.Delivered = delivered;
-    item.Available = (item.Added||0) - delivered;
+    item.Available = (item.Added || 0) - delivered;
   });
 }
 
@@ -70,42 +75,113 @@ function updateAvailable() {
 function renderStock() {
   const tbody = document.querySelector('#stockTable tbody');
   tbody.innerHTML = '';
-  stockData.forEach((r) => {
+  stockData.forEach((r,i)=>{
+    r.RowNum = i+1;
     const tr = document.createElement('tr');
-    tr.innerHTML = `
+    tr.innerHTML = `<td>${r.RowNum}</td>
       <td>${r.Item}</td>
-      <td><input type="number" value="${r.Added}" oninput="editStock('${r.Item}', this.value)"></td>
+      <td><input type="number" value="${r.Added}" onchange="r.Added=this.value"></td>
       <td>${r.Delivered}</td>
-      <td>${r.Available}</td>
-    `;
+      <td>${r.Available}</td>`;
+    tbody.appendChild(tr);
+  });
+  renderItemSelect();
+}
+
+// --- Render Transactions ---
+function renderTransactions() {
+  const tbody = document.querySelector('#transTable tbody');
+  tbody.innerHTML = '';
+  transactions.forEach((t,i)=>{
+    t.RowNum = i+1;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${t.RowNum}</td><td>${t.Iqama}</td><td>${t.Name}</td><td>${t.Date}</td><td>${t.Item}</td><td>${t.Qty}</td>
+      <td>${t.Client}</td><td>${t.Note}</td>
+      <td><button onclick="deleteTransaction(${i})">🗑 Delete</button></td>`;
     tbody.appendChild(tr);
   });
 }
 
-// --- Edit Stock Quantity ---
-function editStock(itemName, value){
-  const row = stockData.find(r => r.Item===itemName);
-  if(row) row.Added = Number(value);
+// --- Item select for transaction ---
+function renderItemSelect() {
+  const sel = document.getElementById('itemSelect');
+  sel.innerHTML='';
+  stockData.forEach(r=>{ if(r.Item) sel.innerHTML += `<option>${r.Item}</option>`; });
+}
+
+// --- Transaction Form Submit ---
+document.getElementById('entryForm').onsubmit = async function(e){
+  e.preventDefault();
+  const itemName = document.getElementById('itemSelect').value;
+  const qty = parseInt(document.getElementById('qty').value);
+  const stockRow = stockData.find(s=>s.Item===itemName);
+  if(!stockRow || stockRow.Available < qty){ alert("Not enough stock"); return; }
+
+  const newTrans = {
+    RowNum: transactions.length ? Math.max(...transactions.map(t=>t.RowNum))+1 : 1,
+    Iqama: document.getElementById('iqama').value,
+    Name: document.getElementById('emp').value,
+    Date: document.getElementById('date').value,
+    Item: itemName,
+    Qty: qty,
+    Client: document.getElementById('client').value,
+    Note: document.getElementById('note').value
+  };
+  transactions.push(newTrans);
   updateAvailable();
   renderStock();
+  renderTransactions();
+  e.target.reset();
+
+  await saveTransaction(newTrans); // save immediately
 }
 
-// --- Save Stock to SheetDB ---
-async function saveStock(){
+// --- Delete transaction ---
+async function deleteTransaction(index){
+  const t = transactions.splice(index,1)[0];
+  updateAvailable();
+  renderStock();
+  renderTransactions();
+
   try{
-    const payload = { data: stockData.map(r=>({Item:r.Item, Added:r.Added, Delivered:r.Delivered, Available:r.Available})) };
-    const res = await fetch(STOCK_API, {
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify(payload)
+    // Delete in SheetDB: using PATCH to overwrite all transactions
+    await fetch(TRAN_API,{
+      method:"PUT",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({data:transactions})
     });
-    if(res.ok) alert("✅ Stock saved successfully!");
-    else alert("❌ Failed to save.");
-  }catch(err){ console.error(err); alert("❌ Error saving stock."); }
+  }catch(err){ console.error(err); }
 }
 
-// --- Load Stock and Transactions ---
-async function loadStockData(){
+// --- Save Stock (PATCH per Item) ---
+async function saveStock(){
+  for(const s of stockData){
+    if(!s.Item) continue;
+    try{
+      await fetch(`${STOCK_API}/Item/${encodeURIComponent(s.Item)}`, {
+        method:"PATCH",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({data:[{Added:+s.Added}]})
+      });
+    }catch(err){ console.error(err); }
+  }
+  alert("✅ Stock saved & updated!");
+  await loadData();
+}
+
+// --- Save Transaction (POST) ---
+async function saveTransaction(trans){
+  try{
+    await fetch(TRAN_API,{
+      method:"POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({data:[trans]})
+    });
+  }catch(err){ console.error(err); }
+}
+
+// --- Load Data from SheetDB ---
+async function loadData(){
   try{
     const sRes = await fetch(STOCK_API);
     const sJson = await sRes.json();
@@ -113,15 +189,16 @@ async function loadStockData(){
 
     const tRes = await fetch(TRAN_API);
     const tJson = await tRes.json();
-    transactions = tJson.map(t=>({Item:t.Item, Qty:+t.Qty}));
+    transactions = tJson.map(t=>({RowNum:+t.RowNum, Iqama:t.Iqama, Name:t.Name, Date:t.Date, Item:t.Item, Qty:+t.Qty, Client:t.Client, Note:t.Note}));
+
   }catch(err){ console.error(err); }
   updateAvailable();
   renderStock();
+  renderTransactions();
 }
 
-// Load on page load
-loadStockData();
+// Load page
+loadData();
 </script>
-
 </body>
 </html>
