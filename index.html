@@ -12,7 +12,6 @@ table { width: 100%; border-collapse: collapse; margin-top: 10px; }
 th, td { border: 1px solid #aaa; padding: 5px; text-align: center; }
 input, select { width: 100%; padding: 5px; margin: 2px 0; }
 button { padding: 5px 10px; margin: 2px; }
-.hidden { display:none; }
 </style>
 </head>
 <body>
@@ -21,171 +20,107 @@ button { padding: 5px 10px; margin: 2px; }
   <h1>Uniform Stock Manager</h1>
 </header>
 
-<section id="stockSection">
-<h2>Stock</h2>
-<button onclick="addStockRow()">Add Row</button>
-<button onclick="deleteStockRow()">Delete Row</button>
-<button onclick="saveEverything()">💾 Save Everything</button>
-<button onclick="loadData()">🔄 Refresh</button>
-
-<table id="stockTable">
-<thead>
-<tr><th>Item</th><th>Added</th><th>Delivered</th><th>Available</th></tr>
-</thead>
-<tbody></tbody>
-</table>
-</section>
-
 <section id="transactionSection">
 <h2>Transactions</h2>
 <form id="entryForm">
-<input type="text" id="iqama" placeholder="Iqama" required>
-<input type="text" id="emp" placeholder="Employee Name" required>
-<input type="date" id="date" required>
-<select id="itemSelect"></select>
-<input type="number" id="qty" placeholder="Quantity" required min="1">
-<input type="text" id="client" placeholder="Client">
-<input type="text" id="note" placeholder="Note">
-<button type="submit">Add Transaction</button>
+  <input type="text" id="iqama" placeholder="Iqama" required>
+  <input type="text" id="emp" placeholder="Employee Name" required>
+  <input type="date" id="date" required>
+  <input type="number" id="rowNum" placeholder="Row Number (1-4)" min="1" max="4" required>
+  <input type="text" id="item" placeholder="Item" required>
+  <input type="number" id="qty" placeholder="Quantity" required min="1">
+  <input type="text" id="client" placeholder="Client">
+  <input type="text" id="note" placeholder="Note">
+  <button type="submit">Add Transaction</button>
 </form>
 
 <table id="transTable">
 <thead>
-<tr><th>ID</th><th>Iqama</th><th>Name</th><th>Date</th><th>Item</th><th>Qty</th><th>Client</th><th>Note</th><th>Action</th></tr>
+<tr><th>RowNum</th><th>Iqama</th><th>Name</th><th>Date</th><th>Item</th><th>Qty</th><th>Client</th><th>Note</th></tr>
 </thead>
 <tbody></tbody>
 </table>
 </section>
 
 <script>
-const STOCK_API = "https://sheetdb.io/api/v1/2y1u7hp9ykzlq?sheet=Stock";
 const TRAN_API = "https://sheetdb.io/api/v1/2y1u7hp9ykzlq?sheet=Transactions";
 
-let stockData = [];
 let transactions = [];
 
-// --- Stock functions ---
-function updateAvailable() {
-  stockData.forEach(item => {
-    const delivered = transactions.filter(t=>t.item===item.Item).reduce((sum,t)=>sum+t.qty,0);
-    item.Delivered = delivered;
-    item.Available = (item.Added || 0) - delivered;
-  });
-}
-
-function renderStock() {
-  const tbody = document.querySelector('#stockTable tbody');
-  tbody.innerHTML = '';
-  stockData.forEach(r => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td contenteditable="true">${r.Item||''}</td>
-      <td><input type="number" value="${r.Added||0}"></td>
-      <td><input type="number" value="${r.Delivered||0}" readonly></td>
-      <td><input type="number" value="${r.Available||0}" readonly></td>`;
-    tbody.appendChild(tr);
-  });
-  renderItemSelect();
-}
-
-function addStockRow() { stockData.push({Item:'',Added:0,Delivered:0,Available:0}); renderStock(); }
-function deleteStockRow() { stockData.pop(); renderStock(); }
-function renderItemSelect() {
-  const sel = document.getElementById('itemSelect'); sel.innerHTML='';
-  stockData.forEach(r=>{ if(r.Item) sel.innerHTML += `<option>${r.Item}</option>`; });
-}
-
-// --- Transactions ---
+// Render transactions table
 function renderTransactions() {
-  const tbody = document.querySelector('#transTable tbody'); tbody.innerHTML='';
-  transactions.forEach((t,i)=>{
+  const tbody = document.querySelector('#transTable tbody');
+  tbody.innerHTML = '';
+  transactions.forEach(t => {
     const tr = document.createElement('tr');
-    tr.innerHTML=`<td>${t.id}</td><td>${t.iqama}</td><td>${t.emp}</td><td>${t.date}</td><td>${t.item}</td><td>${t.qty}</td>
-      <td>${t.client}</td><td>${t.note}</td><td><button onclick="deleteTrans(${i})">🗑</button></td>`;
+    tr.innerHTML = `<td>${t.RowNum}</td><td>${t.Iqama}</td><td>${t.Name}</td><td>${t.Date}</td>
+      <td>${t.Item}</td><td>${t.Qty}</td><td>${t.Client}</td><td>${t.Note}</td>`;
     tbody.appendChild(tr);
   });
 }
 
-function deleteTrans(i) {
-  const t = transactions[i];
-  const s = stockData.find(s=>s.Item===t.item);
-  if(s) s.Delivered -= t.qty;
-  transactions.splice(i,1);
-  updateAvailable();
-  renderStock();
-  renderTransactions();
-}
-
-// --- Form submit ---
-document.getElementById('entryForm').onsubmit = function(e){
-  e.preventDefault();
-  const itemName = document.getElementById('itemSelect').value;
-  const qty = parseInt(document.getElementById('qty').value);
-  const stockRow = stockData.find(s=>s.Item===itemName);
-  if(!stockRow || stockRow.Available < qty){ alert("Not enough stock"); return; }
-
-  // Prevent duplicate transaction by checking ID
-  const newId = Date.now();
-  if(transactions.find(t=>t.id===newId)) return alert("Duplicate entry blocked!");
-
-  transactions.push({
-    id: newId,
-    iqama: document.getElementById('iqama').value,
-    emp: document.getElementById('emp').value,
-    date: document.getElementById('date').value,
-    item: itemName,
-    qty: qty,
-    client: document.getElementById('client').value,
-    note: document.getElementById('note').value
-  });
-  updateAvailable();
-  renderStock();
-  renderTransactions();
-  e.target.reset();
-}
-
-// --- Save to SheetDB ---
-async function saveEverything() {
+// Load data from SheetDB
+async function loadData() {
   try {
-    // --- Save stock: only unique items ---
-    for(const r of stockData){
-      if(!r.Item) continue;
-      const stockPayload = { data: [{ Item: r.Item, Added: r.Added, Delivered: r.Delivered, Available: r.Available }] };
-      await fetch(STOCK_API,{ method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(stockPayload) });
-    }
+    const res = await fetch(TRAN_API);
+    const data = await res.json();
+    transactions = data.map(t => ({
+      RowNum: t.RowNum,
+      Iqama: t.Iqama,
+      Name: t.Name,
+      Date: t.Date,
+      Item: t.Item,
+      Qty: t.Qty,
+      Client: t.Client,
+      Note: t.Note
+    }));
+    renderTransactions();
+  } catch(err) { console.error(err); }
+}
 
-    // --- Save transactions: only new ---
-    for(const t of transactions){
-      if(!t.saved){ // only unsaved
-        const transPayload = { data: [{ ID: t.id, Name: t.emp, Date: t.date, Item: t.item, Qty: t.qty, Client: t.client, Note: t.note }] };
-        await fetch(TRAN_API,{ method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(transPayload) });
-        t.saved = true; // mark as saved
-      }
-    }
+// Form submission
+document.getElementById('entryForm').onsubmit = async function(e){
+  e.preventDefault();
+  const rowNum = parseInt(document.getElementById('rowNum').value);
+  const existing = transactions.find(t=>t.RowNum === rowNum);
+  if(existing){
+    alert("❌ This Row Number already exists! Choose another.");
+    return;
+  }
 
-    alert("✅ Saved! Click 🔄 Refresh to see updates.");
+  const newTrans = {
+    RowNum: rowNum,
+    Iqama: document.getElementById('iqama').value,
+    Name: document.getElementById('emp').value,
+    Date: document.getElementById('date').value,
+    Item: document.getElementById('item').value,
+    Qty: parseInt(document.getElementById('qty').value),
+    Client: document.getElementById('client').value,
+    Note: document.getElementById('note').value
+  };
+
+  try {
+    const payload = { data: [newTrans] };
+    const res = await fetch(TRAN_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if(res.ok){
+      transactions.push(newTrans);
+      renderTransactions();
+      alert("✅ Saved!");
+      e.target.reset();
+    } else {
+      alert("❌ Failed to save.");
+    }
   } catch(err){
-    console.error(err); alert("❌ Failed to save. Check API & CORS.");
+    console.error(err);
+    alert("❌ Network or API error.");
   }
 }
 
-// --- Load SheetDB data ---
-async function loadData() {
-  try {
-    const stockRes = await fetch(STOCK_API);
-    const stockJson = await stockRes.json();
-    stockData = stockJson.map(r=>({Item:r.Item, Added:+r.Added, Delivered:+r.Delivered, Available:+r.Available}));
-
-    const transRes = await fetch(TRAN_API);
-    const transJson = await transRes.json();
-    transactions = transJson.map(t=>({id:+t.ID, emp:t.Name, date:t.Date, item:t.Item, qty:+t.Qty, client:t.Client, note:t.Note, saved:true}));
-
-  } catch(err){ console.error(err); }
-  updateAvailable();
-  renderStock();
-  renderTransactions();
-}
-
-// Load data on page load
+// Load existing transactions on page load
 loadData();
 </script>
 
