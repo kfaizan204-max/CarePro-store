@@ -87,7 +87,7 @@ function renderStock(){
   renderItemSelect();
 }
 
-// --- Render Transactions ---
+// --- Render transactions ---
 function renderTransactions(){
   const tbody = document.querySelector('#transTable tbody');
   tbody.innerHTML='';
@@ -134,7 +134,7 @@ document.getElementById('entryForm').onsubmit = async function(e){
   await saveTransaction(newTrans);
 };
 
-// --- Save stock (PUT all rows to overwrite) ---
+// --- Save stock ---
 async function saveStock(){
   try{
     updateAvailable();
@@ -145,7 +145,7 @@ async function saveStock(){
   }catch(err){console.error(err); alert("❌ Failed to save stock.");}
 }
 
-// --- Save transaction (POST) ---
+// --- Save transaction ---
 async function saveTransaction(trans){
   try{
     await fetch(TRAN_API,{method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({data:[trans]})});
@@ -160,11 +160,14 @@ async function deleteTransaction(index){
   renderStock();
   renderTransactions();
   try{
-    await fetch(TRAN_API,{method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify({data:transactions})});
+    const payload = { data: transactions.map(t=>({
+      Iqama:t.Iqama, Name:t.Name, Date:t.Date, Item:t.Item, Qty:t.Qty, Client:t.Client, Note:t.Note
+    }))};
+    await fetch(TRAN_API,{method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
   }catch(err){console.error(err);}
 }
 
-// --- Load all data ---
+// --- Load data ---
 async function loadData(){
   try{
     const sRes = await fetch(STOCK_API);
@@ -183,5 +186,6 @@ async function loadData(){
 // Initial load
 loadData();
 </script>
+
 </body>
 </html>
