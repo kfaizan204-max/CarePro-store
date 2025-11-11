@@ -23,18 +23,46 @@ header, section {
   padding:15px; margin:10px;
   background:rgba(255,255,255,0.85);
   border-radius:10px; backdrop-filter:blur(6px);
+  box-shadow:0 4px 15px rgba(0,0,0,0.1);
 }
-table { width:100%; border-collapse:collapse; margin-top:10px;}
-th,td { border:1px solid #aaa; padding:6px; text-align:center;}
-input { width:100%; padding:5px; text-align:center; border:none; background:#f8f8f8; }
-input:focus { background:#e0ffe0; outline:2px solid #66a6ff; }
+h1 { text-align:center; color:#004aad; }
+
+table { width:100%; border-collapse:collapse; margin-top:10px; border-radius:8px; overflow:hidden; }
+th,td { border:1px solid #aaa; padding:8px; text-align:center; font-size:14px; }
+th { background:#007bff; color:#fff; }
+
+input {
+  width:100%; padding:5px; text-align:center;
+  border:none; background:#f8f8f8;
+}
+input:focus {
+  background:#e0ffe0;
+  outline:2px solid #66a6ff;
+}
+
 button {
-  padding:8px 15px; margin:4px;
+  padding:10px 18px; margin:8px 4px;
   border:none; border-radius:6px;
   background:#007bff; color:#fff; cursor:pointer; font-weight:bold;
+  transition:0.3s;
 }
-button:hover { background:#66a6ff; color:#000;}
-#saveMsg { color:green; font-weight:bold; display:none; }
+button:hover { background:#66a6ff; color:#000; transform:scale(1.05); }
+
+#saveMsg {
+  position:fixed;
+  top:20px; right:20px;
+  background:#4CAF50;
+  color:white; padding:10px 20px;
+  border-radius:8px;
+  font-weight:bold;
+  display:none;
+  animation:fadeInOut 3s ease forwards;
+}
+@keyframes fadeInOut {
+  0% {opacity:0; transform:translateY(-20px);}
+  10%,90% {opacity:1; transform:translateY(0);}
+  100% {opacity:0; transform:translateY(-20px);}
+}
 </style>
 </head>
 <body>
@@ -44,19 +72,19 @@ button:hover { background:#66a6ff; color:#000;}
 </header>
 
 <section>
-<h2>Stock Summary</h2>
-<table id="stockTable">
-<thead>
-<tr><th>#</th><th>Item</th><th>Added</th><th>Delivered</th><th>Available</th></tr>
-</thead>
-<tbody></tbody>
-</table>
-
-<div style="text-align:right;">
-  <button onclick="saveStock()">💾 Update Stock</button>
-  <span id="saveMsg">✅ Saved successfully!</span>
-</div>
+  <h2>Stock Summary</h2>
+  <table id="stockTable">
+    <thead>
+      <tr><th>#</th><th>Item</th><th>Added</th><th>Delivered</th><th>Available</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <div style="text-align:right;">
+    <button onclick="saveStock()">💾 Save Changes</button>
+  </div>
 </section>
+
+<div id="saveMsg">✅ Saved Successfully!</div>
 
 <script>
 const STOCK_API = "https://sheetdb.io/api/v1/2y1u7hp9ykzlq?sheet=Stock";
@@ -75,12 +103,12 @@ async function loadData() {
     }));
     renderStock();
   } catch (err) {
-    console.error(err);
-    alert("❌ Failed to load data. Check your API or SheetDB link.");
+    console.error("Load error:", err);
+    alert("❌ Failed to load data. Check your API or Sheet name in URL.");
   }
 }
 
-// --- Render Stock ---
+// --- Render Stock Table ---
 function renderStock() {
   const tbody = document.querySelector("#stockTable tbody");
   tbody.innerHTML = "";
@@ -97,29 +125,30 @@ function renderStock() {
   });
 }
 
-// --- Save Changes (PATCH each row by Item) ---
+// --- Save All Changes in One Request ---
 async function saveStock() {
   try {
-    for (const s of stockData) {
-      const url = `https://sheetdb.io/api/v1/2y1u7hp9ykzlq/Item/${encodeURIComponent(s.Item)}?sheet=Stock`;
-      const payload = { data: { Added: s.Added, Delivered: s.Delivered, Available: s.Available } };
-      await fetch(url, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-    }
+    const payload = { data: stockData };
+    const res = await fetch(STOCK_API, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error(await res.text());
+
     const msg = document.getElementById("saveMsg");
-    msg.style.display = "inline";
-    setTimeout(() => (msg.style.display = "none"), 2500);
+    msg.style.display = "block";
+    setTimeout(() => msg.style.display = "none", 3000);
+    loadData(); // Auto-refresh after save
   } catch (err) {
-    console.error(err);
-    alert("❌ Failed to save. Make sure 'Item' is set as unique key in SheetDB settings.");
+    console.error("Save error:", err);
+    alert("❌ Save failed. Check your SheetDB API or sheet name.");
   }
 }
 
 // Load data when page opens
 loadData();
 </script>
+
 </body>
 </html>
