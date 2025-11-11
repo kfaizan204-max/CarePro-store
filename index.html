@@ -39,7 +39,6 @@ button { padding: 5px 10px; margin: 2px; }
 <section id="transactionSection">
 <h2>Transactions</h2>
 <form id="entryForm">
-<input type="number" id="tRowNum" placeholder="Transaction Row Number (1-100)" min="1" required>
 <input type="text" id="iqama" placeholder="Iqama" required>
 <input type="text" id="emp" placeholder="Employee Name" required>
 <input type="date" id="date" required>
@@ -118,16 +117,21 @@ function renderTransactions() {
 
 document.getElementById('entryForm').onsubmit = function(e){
   e.preventDefault();
-  const rowNum = parseInt(document.getElementById('tRowNum').value);
-  if(transactions.find(t=>t.RowNum===rowNum)){ alert("❌ Transaction row already exists!"); return; }
 
   const itemName = document.getElementById('itemSelect').value;
   const qty = parseInt(document.getElementById('qty').value);
   const stockRow = stockData.find(s=>s.Item===itemName);
   if(!stockRow || stockRow.Available < qty){ alert("Not enough stock"); return; }
 
+  // Auto-assign RowNum: next available number
+  let newRowNum = 1;
+  if(transactions.length > 0){
+    const usedNums = transactions.map(t=>t.RowNum);
+    while(usedNums.includes(newRowNum)) newRowNum++;
+  }
+
   const newTrans = {
-    RowNum: rowNum,
+    RowNum: newRowNum,
     Iqama: document.getElementById('iqama').value,
     Name: document.getElementById('emp').value,
     Date: document.getElementById('date').value,
