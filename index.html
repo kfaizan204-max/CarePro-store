@@ -39,7 +39,7 @@ button { padding: 5px 10px; margin: 2px; }
 <section id="transactionSection">
 <h2>Transactions</h2>
 <form id="entryForm">
-<input type="number" id="tRowNum" placeholder="Transaction Row Number (1-4)" min="1" required>
+<input type="number" id="tRowNum" placeholder="Transaction Row Number (1-100)" min="1" required>
 <input type="text" id="iqama" placeholder="Iqama" required>
 <input type="text" id="emp" placeholder="Employee Name" required>
 <input type="date" id="date" required>
@@ -65,7 +65,7 @@ const TRAN_API = "https://sheetdb.io/api/v1/2y1u7hp9ykzlq?sheet=Transactions";
 let stockData = [];
 let transactions = [];
 
-// --- Stock ---
+// --- Stock functions ---
 function updateAvailable() {
   stockData.forEach(item => {
     const delivered = transactions.filter(t=>t.Item===item.Item).reduce((sum,t)=>sum+t.Qty,0);
@@ -110,12 +110,13 @@ function renderTransactions() {
   const tbody = document.querySelector('#transTable tbody'); tbody.innerHTML='';
   transactions.forEach(t => {
     const tr = document.createElement('tr');
-    tr.innerHTML=`<td>${t.RowNum}</td><td>${t.Iqama}</td><td>${t.Name}</td><td>${t.Date}</td><td>${t.Item}</td><td>${t.Qty}</td><td>${t.Client}</td><td>${t.Note}</td>`;
+    tr.innerHTML=`<td>${t.RowNum}</td><td>${t.Iqama}</td><td>${t.Name}</td><td>${t.Date}</td><td>${t.Item}</td><td>${t.Qty}</td>
+      <td>${t.Client}</td><td>${t.Note}</td>`;
     tbody.appendChild(tr);
   });
 }
 
-document.getElementById('entryForm').onsubmit = async function(e){
+document.getElementById('entryForm').onsubmit = function(e){
   e.preventDefault();
   const rowNum = parseInt(document.getElementById('tRowNum').value);
   if(transactions.find(t=>t.RowNum===rowNum)){ alert("❌ Transaction row already exists!"); return; }
@@ -133,7 +134,8 @@ document.getElementById('entryForm').onsubmit = async function(e){
     Item: itemName,
     Qty: qty,
     Client: document.getElementById('client').value,
-    Note: document.getElementById('note').value
+    Note: document.getElementById('note').value,
+    saved: false
   };
   transactions.push(newTrans);
   updateAvailable();
@@ -145,31 +147,33 @@ document.getElementById('entryForm').onsubmit = async function(e){
 // --- Save to SheetDB ---
 async function saveStock() {
   try {
-    // Stock
+    // Save/update Stock rows
     for(const s of stockData){
       if(!s.Item) continue;
-      await fetch(STOCK_API, {
-        method:"POST",
+      await fetch(`${STOCK_API}/RowNum/${s.RowNum}`, {
+        method:"PUT",
         headers:{"Content-Type":"application/json"},
         body: JSON.stringify({data:[s]})
       });
     }
-    // Transactions
+
+    // Save/update Transactions
     for(const t of transactions){
       if(!t.saved){
-        await fetch(TRAN_API,{
-          method:"POST",
+        await fetch(`${TRAN_API}/RowNum/${t.RowNum}`, {
+          method:"PUT",
           headers:{"Content-Type":"application/json"},
           body: JSON.stringify({data:[t]})
         });
         t.saved = true;
       }
     }
-    alert("✅ Saved! Click Refresh to update.");
+
+    alert("✅ Saved! Click 🔄 Refresh to see updates.");
   } catch(err){ console.error(err); alert("❌ Failed to save."); }
 }
 
-// --- Load data ---
+// --- Load data from SheetDB ---
 async function loadStockData() {
   try {
     const sRes = await fetch(STOCK_API);
@@ -185,7 +189,7 @@ async function loadStockData() {
   renderTransactions();
 }
 
-// Load on page load
+// Load data on page load
 loadStockData();
 </script>
 
