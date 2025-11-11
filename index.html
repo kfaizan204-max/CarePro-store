@@ -5,31 +5,49 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Uniform Stock Manager</title>
 <style>
-body { font-family: sans-serif; margin:0; padding:0; background:#e0f7fa; color:#333; }
-header, section { padding: 10px 20px; }
-h1,h2 { margin:0 0 10px 0; }
-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-th, td { border: 1px solid #aaa; padding: 5px; text-align: center; }
-input { width: 60px; padding: 5px; }
-button { padding: 5px 10px; margin: 2px; cursor:pointer; }
-button:hover { background:#66a6ff; color:#fff; }
+:root {
+  --blue1: #89f7fe;
+  --blue2: #66a6ff;
+  --text: #333;
+}
+body {
+  font-family: sans-serif;
+  margin:0;
+  padding:0;
+  background: linear-gradient(120deg, var(--blue1), var(--blue2));
+  background-size: 400% 400%;
+  animation: gradientBG 15s ease infinite;
+  color: var(--text);
+}
+@keyframes gradientBG{
+  0%{background-position:0% 50%}
+  50%{background-position:100% 50%}
+  100%{background-position:0% 50%}
+}
+header, section { padding: 20px; }
+h1,h2 { margin: 0 0 10px 0; text-align: center; }
+table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+th, td { border: 1px solid #aaa; padding: 8px; text-align: center; }
+input { width: 80px; padding: 5px; }
+button { padding: 5px 10px; margin: 2px; cursor:pointer; border:none; border-radius:5px; background:#66a6ff; color:#fff; font-weight:600; transition:.3s;}
+button:hover{ background:#89f7fe; color:#000; }
 </style>
 </head>
 <body>
 
 <header>
-<h1>Uniform Stock Manager</h1>
+  <h1>Uniform Stock Manager</h1>
 </header>
 
 <section id="stockSection">
 <h2>Stock Summary</h2>
+<button onclick="saveStock()">💾 Save Changes</button>
 <table id="stockTable">
 <thead>
-<tr><th>RowNum</th><th>Item</th><th>Added</th><th>Delivered</th><th>Available</th></tr>
+<tr><th>Item</th><th>Added</th><th>Delivered</th><th>Available</th></tr>
 </thead>
 <tbody></tbody>
 </table>
-<button onclick="saveStock()">💾 Save Stock</button>
 </section>
 
 <script>
@@ -39,12 +57,12 @@ const TRAN_API = "https://sheetdb.io/api/v1/2y1u7hp9ykzlq?sheet=Transactions";
 let stockData = [];
 let transactions = [];
 
-// --- Update Available ---
+// --- Update Delivered and Available ---
 function updateAvailable() {
   stockData.forEach(item => {
-    const delivered = transactions.filter(t => t.Item === item.Item).reduce((sum, t) => sum + t.Qty, 0);
+    const delivered = transactions.filter(t => t.Item === item.Item).reduce((sum,t)=>sum + t.Qty, 0);
     item.Delivered = delivered;
-    item.Available = (item.Added || 0) - delivered;
+    item.Available = (item.Added||0) - delivered;
   });
 }
 
@@ -52,13 +70,11 @@ function updateAvailable() {
 function renderStock() {
   const tbody = document.querySelector('#stockTable tbody');
   tbody.innerHTML = '';
-  stockData.forEach((r,i)=>{
-    r.RowNum = i+1;
+  stockData.forEach((r) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${r.RowNum}</td>
       <td>${r.Item}</td>
-      <td><input type="number" value="${r.Added}" onchange="updateAdded(${i}, this.value)"></td>
+      <td><input type="number" value="${r.Added}" oninput="editStock('${r.Item}', this.value)"></td>
       <td>${r.Delivered}</td>
       <td>${r.Available}</td>
     `;
@@ -66,37 +82,44 @@ function renderStock() {
   });
 }
 
-// --- Update Added Quantity ---
-function updateAdded(index, value) {
-  stockData[index].Added = Number(value);
+// --- Edit Stock Quantity ---
+function editStock(itemName, value){
+  const row = stockData.find(r => r.Item===itemName);
+  if(row) row.Added = Number(value);
   updateAvailable();
   renderStock();
 }
 
 // --- Save Stock to SheetDB ---
-async function saveStock() {
-  try {
-    const payload = { data: stockData.map(s => ({Item:s.Item, Added:s.Added, Delivered:s.Delivered, Available:s.Available})) };
-    await fetch(STOCK_API, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
-    alert("✅ Stock saved successfully!");
-  } catch(err){ console.error(err); alert("❌ Failed to save."); }
+async function saveStock(){
+  try{
+    const payload = { data: stockData.map(r=>({Item:r.Item, Added:r.Added, Delivered:r.Delivered, Available:r.Available})) };
+    const res = await fetch(STOCK_API, {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(payload)
+    });
+    if(res.ok) alert("✅ Stock saved successfully!");
+    else alert("❌ Failed to save.");
+  }catch(err){ console.error(err); alert("❌ Error saving stock."); }
 }
 
-// --- Load Stock Data ---
-async function loadStockData() {
+// --- Load Stock and Transactions ---
+async function loadStockData(){
   try{
     const sRes = await fetch(STOCK_API);
     const sJson = await sRes.json();
-    stockData = sJson.map(r => ({Item:r.Item, Added:+r.Added, Delivered:+r.Delivered, Available:+r.Available}));
+    stockData = sJson.map(r=>({Item:r.Item, Added:+r.Added, Delivered:+r.Delivered, Available:+r.Available}));
+
     const tRes = await fetch(TRAN_API);
     const tJson = await tRes.json();
-    transactions = tJson.map(t => ({Item:t.Item, Qty:+t.Qty}));
+    transactions = tJson.map(t=>({Item:t.Item, Qty:+t.Qty}));
   }catch(err){ console.error(err); }
   updateAvailable();
   renderStock();
 }
 
-// Load page
+// Load on page load
 loadStockData();
 </script>
 
