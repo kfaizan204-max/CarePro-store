@@ -91,30 +91,27 @@ input[readonly]{background:#eee;}
 let stockData = [];
 let transactions = [];
 const USERS = [{ id:'admin', password:'1234' }];
-const API_BASE = "https://script.google.com/macros/s/AKfycbwJFbXTycnBH2BH9D1XXhfG-pTOKfO4seGO_0mXIuaZZZzyFg8sz00SaNwAfbz-ty4/exec"; // Apps Script URL
+const API_BASE = "https://script.google.com/macros/s/AKfycbw9oSVKv5E3wfodBbUSqWToWke6ANe-KfDVEe22x_m_pdpo64PerqLYAUKR51NeCvY/exec";
 
-// Update stock availability
+// Stock update
 function updateDeliveredAndAvailable(){
-  stockData.forEach(item => {
-    const deliveredQty = transactions
-      .filter(t => t.item === item.Item)
-      .reduce((sum,t) => sum + t.qty,0);
+  stockData.forEach(item=>{
+    const deliveredQty = transactions.filter(t=>t.item===item.Item).reduce((sum,t)=>sum+t.qty,0);
     item.Delivered = deliveredQty;
-    item.Available = (item.Added||0) - deliveredQty;
+    item.Available = (item.Added||0)-deliveredQty;
   });
 }
 
-// Render stock table
 function renderStock(){
-  const tbody=document.querySelector('#stockTable tbody');
+  const tbody = document.querySelector('#stockTable tbody');
   tbody.innerHTML='';
-  stockData.forEach(r=>{
-    const tr=document.createElement('tr');
+  stockData.forEach(row=>{
+    const tr = document.createElement('tr');
     tr.innerHTML=`
-      <td contenteditable="true">${r.Item||''}</td>
-      <td><input type="number" value="${r.Added||0}"></td>
-      <td><input type="number" value="${r.Delivered||0}" readonly></td>
-      <td><input type="number" value="${r.Available||0}" readonly></td>
+      <td contenteditable="true">${row.Item||''}</td>
+      <td><input type="number" value="${row.Added||0}"></td>
+      <td><input type="number" value="${row.Delivered||0}" readonly></td>
+      <td><input type="number" value="${row.Available||0}" readonly></td>
     `;
     tbody.appendChild(tr);
   });
@@ -124,55 +121,17 @@ function renderStock(){
 function addStockRow(){ stockData.push({Item:'',Added:0,Delivered:0,Available:0}); renderStock();}
 function deleteStockRow(){ stockData.pop(); renderStock();}
 
-// Render item dropdown
-function renderItemSelect(){
-  const select=document.getElementById('itemSelect');
-  select.innerHTML='';
-  stockData.forEach(r=>{if(r.Item) select.innerHTML+=`<option>${r.Item}</option>`;});
-}
-
-// Render transactions
-function renderTransactions(){
-  const tbody=document.querySelector('#transTable tbody');
-  tbody.innerHTML='';
-  transactions.forEach((t,i)=>{
-    const tr=document.createElement('tr');
-    tr.innerHTML=`
-      <td>${t.id}</td>
-      <td>${t.iqama}</td>
-      <td>${t.emp}</td>
-      <td>${t.date}</td>
-      <td>${t.item}</td>
-      <td>${t.qty}</td>
-      <td>${t.client}</td>
-      <td>${t.note}</td>
-      <td><button onclick="deleteTrans(${i})">🗑</button></td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-// Delete a transaction
-function deleteTrans(i){
-  const t=transactions[i];
-  const stockRow=stockData.find(s=>s.Item===t.item);
-  if(stockRow) stockRow.Delivered-=t.qty;
-  transactions.splice(i,1);
-  updateDeliveredAndAvailable();
-  renderTransactions();
-}
-
-// Save everything to Google Sheet
+// Save everything
 async function saveEverything(){
   const tbody=document.querySelector('#stockTable tbody');
   stockData=[];
   tbody.querySelectorAll('tr').forEach(tr=>{
     const cells=tr.querySelectorAll('td');
     stockData.push({
-      Item:cells[0].innerText.trim(),
-      Added:parseInt(cells[1].querySelector('input').value)||0,
-      Delivered:parseInt(cells[2].querySelector('input').value)||0,
-      Available:parseInt(cells[3].querySelector('input').value)||0
+      Item: cells[0].innerText.trim(),
+      Added: parseInt(cells[1].querySelector('input').value)||0,
+      Delivered: parseInt(cells[2].querySelector('input').value)||0,
+      Available: parseInt(cells[3].querySelector('input').value)||0
     });
   });
   updateDeliveredAndAvailable();
@@ -180,20 +139,21 @@ async function saveEverything(){
   renderTransactions();
 
   try{
-    // Save stock
     await fetch(API_BASE,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(stockData)});
-    // Save transactions
-    if(transactions.length>0){
-      await fetch(API_BASE,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'transactions',data:transactions})});
-    }
+    if(transactions.length>0) await fetch(API_BASE,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'transactions',data:transactions})});
     alert('✅ Everything saved!');
   }catch(err){
     console.error(err);
-    alert('❌ Failed to save. Check Apps Script deployment and CORS.');
+    alert('❌ Failed to save. Check Apps Script deployment.');
   }
 }
 
-// Form submission
+function renderItemSelect(){
+  const select=document.getElementById('itemSelect');
+  select.innerHTML='';
+  stockData.forEach(r=>{if(r.Item) select.innerHTML+=`<option>${r.Item}</option>`;});
+}
+
 document.getElementById('entryForm').onsubmit=async function(e){
   e.preventDefault();
   const itemName=document.getElementById('itemSelect').value;
@@ -216,7 +176,56 @@ document.getElementById('entryForm').onsubmit=async function(e){
   e.target.reset();
 };
 
-// Login
+function renderTransactions(){
+  const tbody=document.querySelector('#transTable tbody');
+  tbody.innerHTML='';
+  transactions.forEach((t,i)=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td>${t.id}</td>
+      <td>${t.iqama}</td>
+      <td>${t.emp}</td>
+      <td>${t.date}</td>
+      <td>${t.item}</td>
+      <td>${t.qty}</td>
+      <td>${t.client}</td>
+      <td>${t.note}</td>
+      <td><button onclick="deleteTrans(${i})">🗑</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function deleteTrans(i){
+  const t=transactions[i];
+  const stockRow=stockData.find(s=>s.Item===t.item);
+  if(stockRow) stockRow.Delivered-=t.qty;
+  transactions.splice(i,1);
+  updateDeliveredAndAvailable();
+  renderTransactions();
+}
+
+function exportStock(){
+  let csv='Item,Added,Delivered,Available\n';
+  stockData.forEach(r=>csv+=`${r.Item},${r.Added},${r.Delivered},${r.Available}\n`);
+  downloadCSV(csv,'stock.csv');
+}
+
+function exportReport(){
+  let csv='ID,Iqama,Name,Date,Item,Qty,Client,Note\n';
+  transactions.forEach(t=>csv+=`${t.id},${t.iqama},${t.emp},${t.date},${t.item},${t.qty},${t.client},${t.note}\n`);
+  downloadCSV(csv,'transactions.csv');
+}
+
+function downloadCSV(csv,name){
+  const blob=new Blob([csv],{type:'text/csv'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 function login(){
   const id=document.getElementById('userId').value.trim();
   const password=document.getElementById('password').value.trim();
@@ -227,43 +236,21 @@ function login(){
     document.getElementById('stockButtons').classList.remove('hidden');
     renderItemSelect();
     renderTransactions();
-  } else alert('Invalid credentials');
+  }else alert('Invalid credentials');
 }
 
-// Load stock and transactions initially
 async function loadStock(){
   try{
     const res=await fetch(API_BASE);
     const data=await res.json();
-    stockData=data.stock || [];
-    transactions=data.transactions || [];
+    stockData=data.stock;
+    transactions=data.transactions;
   }catch(err){console.error(err);}
   updateDeliveredAndAvailable();
   renderStock();
   renderTransactions();
 }
-
 loadStock();
-
-// CSV Export
-function exportStock(){
-  let csv='Item,Added,Delivered,Available\n';
-  stockData.forEach(r=>csv+=`${r.Item},${r.Added},${r.Delivered},${r.Available}\n`);
-  downloadCSV(csv,'stock.csv');
-}
-function exportReport(){
-  let csv='ID,Iqama,Name,Date,Item,Qty,Client,Note\n';
-  transactions.forEach(t=>csv+=`${t.id},${t.iqama},${t.emp},${t.date},${t.item},${t.qty},${t.client},${t.note}\n`);
-  downloadCSV(csv,'transactions.csv');
-}
-function downloadCSV(csv,name){
-  const blob=new Blob([csv],{type:'text/csv'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download=name;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
 </script>
 
 </body>
