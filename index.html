@@ -123,12 +123,7 @@ document.getElementById('entryForm').onsubmit = function(e){
   const stockRow = stockData.find(s=>s.Item===itemName);
   if(!stockRow || stockRow.Available < qty){ alert("Not enough stock"); return; }
 
-  // Auto-assign RowNum: next available number
-  let newRowNum = 1;
-  if(transactions.length > 0){
-    const usedNums = transactions.map(t=>t.RowNum);
-    while(usedNums.includes(newRowNum)) newRowNum++;
-  }
+  let newRowNum = transactions.length ? Math.max(...transactions.map(t=>t.RowNum)) + 1 : 1;
 
   const newTrans = {
     RowNum: newRowNum,
@@ -151,21 +146,21 @@ document.getElementById('entryForm').onsubmit = function(e){
 // --- Save to SheetDB ---
 async function saveStock() {
   try {
-    // Save/update Stock rows
+    // Stock: use POST to create/update
     for(const s of stockData){
       if(!s.Item) continue;
-      await fetch(`${STOCK_API}/RowNum/${s.RowNum}`, {
-        method:"PUT",
+      await fetch(STOCK_API, {
+        method:"POST",
         headers:{"Content-Type":"application/json"},
         body: JSON.stringify({data:[s]})
       });
     }
 
-    // Save/update Transactions
+    // Transactions: only unsaved
     for(const t of transactions){
       if(!t.saved){
-        await fetch(`${TRAN_API}/RowNum/${t.RowNum}`, {
-          method:"PUT",
+        await fetch(TRAN_API,{
+          method:"POST",
           headers:{"Content-Type":"application/json"},
           body: JSON.stringify({data:[t]})
         });
@@ -173,11 +168,11 @@ async function saveStock() {
       }
     }
 
-    alert("✅ Saved! Click 🔄 Refresh to see updates.");
+    alert("✅ Saved! Click Refresh to see updates.");
   } catch(err){ console.error(err); alert("❌ Failed to save."); }
 }
 
-// --- Load data from SheetDB ---
+// --- Load data ---
 async function loadStockData() {
   try {
     const sRes = await fetch(STOCK_API);
@@ -193,7 +188,7 @@ async function loadStockData() {
   renderTransactions();
 }
 
-// Load data on page load
+// Load on page load
 loadStockData();
 </script>
 
