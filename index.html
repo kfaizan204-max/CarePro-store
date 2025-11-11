@@ -21,11 +21,17 @@ button:hover { background:#66a6ff; color:#fff; }
   <h1>Uniform Stock Manager</h1>
 </header>
 
-<section id="stockSection">
-<h2>Stock</h2>
-<button onclick="addStockRow()">Add Row</button>
-<button onclick="saveStock()">💾 Save Stock</button>
+<section id="stockEntrySection">
+<h2>Add Stock</h2>
+<form id="stockForm">
+<input type="text" id="sItem" placeholder="Item Name" required>
+<input type="number" id="sQty" placeholder="Added Quantity" min="1" required>
+<button type="submit">Add Stock</button>
+</form>
+</section>
 
+<section id="stockSection">
+<h2>Stock Summary</h2>
 <table id="stockTable">
 <thead>
 <tr><th>RowNum</th><th>Item</th><th>Added</th><th>Delivered</th><th>Available</th><th>Action</th></tr>
@@ -62,12 +68,12 @@ const TRAN_API = "https://sheetdb.io/api/v1/2y1u7hp9ykzlq?sheet=Transactions";
 let stockData = [];
 let transactions = [];
 
-// --- Update Available stock ---
+// --- Update Available ---
 function updateAvailable() {
   stockData.forEach(item => {
-    const delivered = transactions.filter(t=>t.Item===item.Item).reduce((sum,t)=>sum+t.Qty,0);
+    const delivered = transactions.filter(t => t.Item === item.Item).reduce((sum, t) => sum + t.Qty, 0);
     item.Delivered = delivered;
-    item.Available = (item.Added||0) - delivered;
+    item.Available = (item.Added || 0) - delivered;
   });
 }
 
@@ -78,41 +84,25 @@ function renderStock() {
   stockData.forEach((r,i)=>{
     r.RowNum = i+1;
     const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${r.RowNum}</td>
-      <td contenteditable="true">${r.Item||''}</td>
-      <td><input type="number" value="${r.Added||0}"></td>
-      <td>${r.Delivered||0}</td>
-      <td>${r.Available||0}</td>
-      <td><button onclick="deleteStock(${i}, ${r.RowNum})">🗑 Delete</button></td>
-    `;
+    tr.innerHTML = `<td>${r.RowNum}</td>
+      <td>${r.Item}</td>
+      <td>${r.Added}</td>
+      <td>${r.Delivered}</td>
+      <td>${r.Available}</td>
+      <td><button onclick="deleteStock(${r.RowNum})">🗑 Delete</button></td>`;
     tbody.appendChild(tr);
   });
   renderItemSelect();
 }
 
-// --- Add/Delete Stock Row ---
-function addStockRow(){ stockData.push({Item:'',Added:0,Delivered:0,Available:0}); renderStock(); }
-function deleteStock(index,rowNum){ 
-  stockData.splice(index,1);
-  renderStock();
-  fetch(`${STOCK_API}&RowNum=${rowNum}`, {method:"DELETE"}).catch(err=>console.error(err));
-}
-
-// --- Render Item Select ---
-function renderItemSelect(){
-  const sel=document.getElementById('itemSelect'); sel.innerHTML='';
-  stockData.forEach(r=>{ if(r.Item) sel.innerHTML += `<option>${r.Item}</option>`; });
-}
-
-// --- Render Transactions ---
+// --- Render Transactions Table ---
 function renderTransactions() {
-  const tbody = document.querySelector('#transTable tbody'); tbody.innerHTML='';
+  const tbody = document.querySelector('#transTable tbody');
+  tbody.innerHTML='';
   transactions.forEach((t,i)=>{
     t.RowNum = i+1;
     const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${t.RowNum}</td>
+    tr.innerHTML = `<td>${t.RowNum}</td>
       <td>${t.Iqama}</td>
       <td>${t.Name}</td>
       <td>${t.Date}</td>
@@ -120,33 +110,45 @@ function renderTransactions() {
       <td>${t.Qty}</td>
       <td>${t.Client}</td>
       <td>${t.Note}</td>
-      <td><button onclick="deleteTransaction(${i},${t.RowNum})">🗑 Delete</button></td>
-    `;
+      <td><button onclick="deleteTransaction(${t.RowNum})">🗑 Delete</button></td>`;
     tbody.appendChild(tr);
   });
 }
 
-// --- Delete Transaction ---
-function deleteTransaction(index,rowNum){
-  transactions.splice(index,1);
-  updateAvailable();
-  renderStock();
-  renderTransactions();
-  fetch(`${TRAN_API}&RowNum=${rowNum}`, {method:"DELETE"}).catch(err=>console.error(err));
+// --- Populate Item Select ---
+function renderItemSelect() {
+  const sel = document.getElementById('itemSelect'); sel.innerHTML='';
+  stockData.forEach(r=>{ if(r.Item) sel.innerHTML += `<option>${r.Item}</option>`; });
 }
 
-// --- Add Transaction Form ---
-document.getElementById('entryForm').onsubmit = function(e){
+// --- Stock Form Submit ---
+document.getElementById('stockForm').onsubmit = async function(e){
+  e.preventDefault();
+  const item = document.getElementById('sItem').value.trim();
+  const qty = parseInt(document.getElementById('sQty').value);
+  if(!item || qty <= 0) return;
+
+  const existing = stockData.find(s=>s.Item === item);
+  if(existing){ existing.Added += qty; } 
+  else { stockData.push({Item:item, Added:qty, Delivered:0, Available:qty}); }
+
+  updateAvailable();
+  renderStock();
+  document.getElementById('sItem').value=''; document.getElementById('sQty').value='';
+
+  await saveStock();
+};
+
+// --- Transaction Form Submit ---
+document.getElementById('entryForm').onsubmit = async function(e){
   e.preventDefault();
   const itemName = document.getElementById('itemSelect').value;
   const qty = parseInt(document.getElementById('qty').value);
   const stockRow = stockData.find(s=>s.Item===itemName);
   if(!stockRow || stockRow.Available < qty){ alert("Not enough stock"); return; }
 
-  const newRowNum = transactions.length ? Math.max(...transactions.map(t=>t.RowNum))+1 : 1;
-
   const newTrans = {
-    RowNum: newRowNum,
+    RowNum: transactions.length ? Math.max(...transactions.map(t=>t.RowNum))+1 : 1,
     Iqama: document.getElementById('iqama').value,
     Name: document.getElementById('emp').value,
     Date: document.getElementById('date').value,
@@ -161,37 +163,59 @@ document.getElementById('entryForm').onsubmit = function(e){
   renderTransactions();
   e.target.reset();
 
-  // Auto-save transaction immediately
-  saveTransaction(newTrans);
+  await saveTransaction(newTrans);
+};
+
+// --- Delete Stock ---
+async function deleteStock(rowNum){
+  const index = rowNum-1;
+  stockData.splice(index,1);
+  renderStock();
+  await saveStock(); // overwrite all stock
+}
+
+// --- Delete Transaction ---
+async function deleteTransaction(rowNum){
+  const index = rowNum-1;
+  transactions.splice(index,1);
+  updateAvailable();
+  renderStock();
+  renderTransactions();
+  await saveAllTransactions(); // overwrite all transactions
 }
 
 // --- Save Stock ---
 async function saveStock(){
-  for(const s of stockData){
-    if(!s.Item) continue;
-    await fetch(STOCK_API,{ method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({data:[s]})});
-  }
-  alert("✅ Stock saved!");
-  await loadData();
+  try{
+    const payload = { data: stockData.map(s => ({Item:s.Item, Added:s.Added, Delivered:s.Delivered, Available:s.Available})) };
+    await fetch(STOCK_API, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
+  }catch(err){ console.error(err); }
 }
 
-// --- Save Single Transaction ---
+// --- Save Transactions ---
 async function saveTransaction(trans){
   try{
-    await fetch(TRAN_API,{ method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({data:[trans]})});
+    const payload = { data:[trans] };
+    await fetch(TRAN_API, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
+  }catch(err){ console.error(err); }
+}
+async function saveAllTransactions(){
+  try{
+    const payload = { data: transactions.map(t => ({RowNum:t.RowNum, Iqama:t.Iqama, Name:t.Name, Date:t.Date, Item:t.Item, Qty:t.Qty, Client:t.Client, Note:t.Note})) };
+    await fetch(TRAN_API, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
   }catch(err){ console.error(err); }
 }
 
 // --- Load Data ---
-async function loadData(){
+async function loadStockData(){
   try{
     const sRes = await fetch(STOCK_API);
     const sJson = await sRes.json();
-    stockData = sJson.map(r=>({Item:r.Item, Added:+r.Added, Delivered:+r.Delivered, Available:+r.Available}));
+    stockData = sJson.map(r => ({Item:r.Item, Added:+r.Added, Delivered:+r.Delivered, Available:+r.Available}));
 
     const tRes = await fetch(TRAN_API);
     const tJson = await tRes.json();
-    transactions = tJson.map(t=>({RowNum:+t.RowNum, Iqama:t.Iqama, Name:t.Name, Date:t.Date, Item:t.Item, Qty:+t.Qty, Client:t.Client, Note:t.Note}));
+    transactions = tJson.map(t => ({RowNum:+t.RowNum, Iqama:t.Iqama, Name:t.Name, Date:t.Date, Item:t.Item, Qty:+t.Qty, Client:t.Client, Note:t.Note}));
   }catch(err){ console.error(err); }
   updateAvailable();
   renderStock();
@@ -199,7 +223,7 @@ async function loadData(){
 }
 
 // Load on page load
-loadData();
+loadStockData();
 </script>
 
 </body>
