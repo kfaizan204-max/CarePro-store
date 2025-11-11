@@ -24,7 +24,6 @@ button{padding:5px 10px;margin:2px;}
 <h2>Stock</h2>
 <button onclick="addStockRow()">Add Row</button>
 <button onclick="deleteStockRow()">Delete Row</button>
-<button onclick="saveStock()">💾 Save Stock</button>
 <table id="stockTable">
 <thead>
 <tr><th>Item</th><th>Added</th><th>Delivered</th><th>Available</th></tr>
@@ -46,8 +45,6 @@ button{padding:5px 10px;margin:2px;}
 <button type="submit">Add Entry</button>
 </form>
 
-<button onclick="saveTransactions()">💾 Save Transactions</button>
-
 <table id="transTable">
 <thead>
 <tr><th>ID</th><th>Iqama</th><th>Name</th><th>Date</th><th>Item</th><th>Qty</th><th>Client</th><th>Note</th><th>Action</th></tr>
@@ -56,8 +53,10 @@ button{padding:5px 10px;margin:2px;}
 </table>
 </section>
 
+<button onclick="saveEverything()">💾 Save Everything</button>
+
 <script>
-const API_BASE = "https://sheetdb.io/api/v1/2y1u7hp9ykzlq"; // your SheetDB API
+const API_BASE = "https://sheetdb.io/api/v1/2y1u7hp9ykzlq"; // SheetDB API
 
 let stockData = [];
 let transactions = [];
@@ -131,12 +130,13 @@ document.getElementById('entryForm').onsubmit=function(e){
   e.target.reset();
 };
 
-// --- Save to SheetDB ---
-async function saveStock(){
-  const tbody=document.querySelector('#stockTable tbody');
-  stockData=[];
+// --- Save Everything ---
+async function saveEverything(){
+  // Update stockData from table
+  const tbody = document.querySelector('#stockTable tbody');
+  stockData = [];
   tbody.querySelectorAll('tr').forEach(tr=>{
-    const c=tr.querySelectorAll('td');
+    const c = tr.querySelectorAll('td');
     stockData.push({
       Item:c[0].innerText.trim(),
       Added:+c[1].querySelector('input').value,
@@ -144,53 +144,45 @@ async function saveStock(){
       Available:+c[3].querySelector('input').value
     });
   });
+  updateDeliveredAndAvailable();
+  renderStock();
+  renderTransactions();
+
   try{
+    // Save Stock
     await fetch(`${API_BASE}/Stock`, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({data: stockData})
     });
-    alert('✅ Stock saved!');
-  }catch(err){console.error(err); alert('❌ Failed to save stock');}
+    // Save Transactions
+    if(transactions.length>0){
+      await fetch(`${API_BASE}/Transactions`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({data: transactions})
+      });
+    }
+    alert('✅ Everything saved!');
+  }catch(err){
+    console.error(err);
+    alert('❌ Failed to save everything. Check SheetDB API & CORS.');
+  }
 }
 
-async function saveTransactions(){
-  if(transactions.length===0) return alert("No transactions to save");
-  try{
-    await fetch(`${API_BASE}/Transactions`, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({data: transactions})
-    });
-    alert('✅ Transactions saved!');
-  }catch(err){console.error(err); alert('❌ Failed to save transactions');}
-}
-
-// --- Load SheetDB Data ---
+// --- Load Data ---
 async function loadData(){
   try{
     // Load Stock
     const resStock = await fetch(`${API_BASE}/Stock`);
     const stockJSON = await resStock.json();
-    stockData = stockJSON.map(r=>({
-      Item:r.Item,
-      Added:+r.Added,
-      Delivered:+r.Delivered,
-      Available:+r.Available
-    }));
+    stockData = stockJSON.map(r=>({Item:r.Item,Added:+r.Added,Delivered:+r.Delivered,Available:+r.Available}));
+    
     // Load Transactions
     const resTrans = await fetch(`${API_BASE}/Transactions`);
     const transJSON = await resTrans.json();
-    transactions = transJSON.map(r=>({
-      id:r.ID,
-      emp:r.Name,
-      date:r.Date,
-      item:r.Item,
-      qty:+r.Qty,
-      client:r.Client,
-      note:r.Note,
-      iqama:""
-    }));
+    transactions = transJSON.map(r=>({id:r.ID,emp:r.Name,date:r.Date,item:r.Item,qty:+r.Qty,client:r.Client,note:r.Note,iqama:""}));
+    
   }catch(err){console.error(err);}
   updateDeliveredAndAvailable();
   renderStock();
