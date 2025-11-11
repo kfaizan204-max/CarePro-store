@@ -25,8 +25,7 @@ button { padding: 5px 10px; margin: 2px; }
 <h2>Stock</h2>
 <button onclick="addStockRow()">Add Row</button>
 <button onclick="deleteStockRow()">Delete Row</button>
-<button onclick="saveStock()">💾 Save Stock</button>
-<button onclick="loadStockData()">🔄 Refresh</button>
+<button onclick="saveEverything()">💾 Save Everything</button>
 
 <table id="stockTable">
 <thead>
@@ -64,7 +63,7 @@ const TRAN_API = "https://sheetdb.io/api/v1/2y1u7hp9ykzlq?sheet=Transactions";
 let stockData = [];
 let transactions = [];
 
-// --- Stock functions ---
+// --- Stock ---
 function updateAvailable() {
   stockData.forEach(item => {
     const delivered = transactions.filter(t=>t.Item===item.Item).reduce((sum,t)=>sum+t.Qty,0);
@@ -76,7 +75,8 @@ function updateAvailable() {
 function renderStock() {
   const tbody = document.querySelector('#stockTable tbody');
   tbody.innerHTML = '';
-  stockData.forEach(r => {
+  stockData.forEach((r,i) => {
+    r.RowNum = i+1;
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${r.RowNum}</td>
       <td contenteditable="true">${r.Item||''}</td>
@@ -88,17 +88,8 @@ function renderStock() {
   renderItemSelect();
 }
 
-function addStockRow() {
-  const newRowNum = stockData.length + 1;
-  stockData.push({RowNum:newRowNum, Item:'', Added:0, Delivered:0, Available:0});
-  renderStock();
-}
-
-function deleteStockRow() {
-  stockData.pop();
-  renderStock();
-}
-
+function addStockRow() { stockData.push({Item:'', Added:0, Delivered:0, Available:0}); renderStock(); }
+function deleteStockRow() { stockData.pop(); renderStock(); }
 function renderItemSelect() {
   const sel = document.getElementById('itemSelect'); sel.innerHTML='';
   stockData.forEach(r=>{ if(r.Item) sel.innerHTML += `<option>${r.Item}</option>`; });
@@ -107,7 +98,8 @@ function renderItemSelect() {
 // --- Transactions ---
 function renderTransactions() {
   const tbody = document.querySelector('#transTable tbody'); tbody.innerHTML='';
-  transactions.forEach(t => {
+  transactions.forEach((t,i) => {
+    t.RowNum = i+1;
     const tr = document.createElement('tr');
     tr.innerHTML=`<td>${t.RowNum}</td><td>${t.Iqama}</td><td>${t.Name}</td><td>${t.Date}</td><td>${t.Item}</td><td>${t.Qty}</td>
       <td>${t.Client}</td><td>${t.Note}</td>`;
@@ -117,13 +109,13 @@ function renderTransactions() {
 
 document.getElementById('entryForm').onsubmit = function(e){
   e.preventDefault();
-
   const itemName = document.getElementById('itemSelect').value;
   const qty = parseInt(document.getElementById('qty').value);
   const stockRow = stockData.find(s=>s.Item===itemName);
   if(!stockRow || stockRow.Available < qty){ alert("Not enough stock"); return; }
 
-  let newRowNum = transactions.length ? Math.max(...transactions.map(t=>t.RowNum)) + 1 : 1;
+  // Auto RowNum
+  const newRowNum = transactions.length ? Math.max(...transactions.map(t=>t.RowNum)) + 1 : 1;
 
   const newTrans = {
     RowNum: newRowNum,
@@ -143,20 +135,20 @@ document.getElementById('entryForm').onsubmit = function(e){
   e.target.reset();
 }
 
-// --- Save to SheetDB ---
-async function saveStock() {
+// --- Save Everything ---
+async function saveEverything() {
   try {
-    // Stock: use POST to create/update
+    // Save Stock
     for(const s of stockData){
       if(!s.Item) continue;
-      await fetch(STOCK_API, {
+      await fetch(STOCK_API,{
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body: JSON.stringify({data:[s]})
       });
     }
 
-    // Transactions: only unsaved
+    // Save Transactions (only unsaved)
     for(const t of transactions){
       if(!t.saved){
         await fetch(TRAN_API,{
@@ -168,16 +160,18 @@ async function saveStock() {
       }
     }
 
-    alert("✅ Saved! Click Refresh to see updates.");
+    alert("✅ Saved successfully!");
+    // Auto refresh after save
+    await loadStockData();
   } catch(err){ console.error(err); alert("❌ Failed to save."); }
 }
 
-// --- Load data ---
+// --- Load Data ---
 async function loadStockData() {
   try {
     const sRes = await fetch(STOCK_API);
     const sJson = await sRes.json();
-    stockData = sJson.map(r=>({RowNum:+r.RowNum, Item:r.Item, Added:+r.Added, Delivered:+r.Delivered, Available:+r.Available}));
+    stockData = sJson.map(r=>({Item:r.Item, Added:+r.Added, Delivered:+r.Delivered, Available:+r.Available}));
 
     const tRes = await fetch(TRAN_API);
     const tJson = await tRes.json();
