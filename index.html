@@ -26,6 +26,7 @@ button { padding: 5px 10px; margin: 2px; }
 <button onclick="addStockRow()">Add Row</button>
 <button onclick="deleteStockRow()">Delete Row</button>
 <button onclick="saveEverything()">💾 Save Everything</button>
+<button onclick="loadData()">🔄 Refresh</button>
 
 <table id="stockTable">
 <thead>
@@ -121,8 +122,13 @@ document.getElementById('entryForm').onsubmit = function(e){
   const qty = parseInt(document.getElementById('qty').value);
   const stockRow = stockData.find(s=>s.Item===itemName);
   if(!stockRow || stockRow.Available < qty){ alert("Not enough stock"); return; }
+
+  // Prevent duplicate transaction by checking ID
+  const newId = Date.now();
+  if(transactions.find(t=>t.id===newId)) return alert("Duplicate entry blocked!");
+
   transactions.push({
-    id: Date.now(),
+    id: newId,
     iqama: document.getElementById('iqama').value,
     emp: document.getElementById('emp').value,
     date: document.getElementById('date').value,
@@ -140,16 +146,23 @@ document.getElementById('entryForm').onsubmit = function(e){
 // --- Save to SheetDB ---
 async function saveEverything() {
   try {
-    // Save stock
-    const stockPayload = { data: stockData.map(r=>({Item:r.Item, Added:r.Added, Delivered:r.Delivered, Available:r.Available})) };
-    await fetch(STOCK_API,{ method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(stockPayload)});
-    
-    // Save transactions
-    if(transactions.length>0){
-      const transPayload = { data: transactions.map(t=>({ID:t.id, Name:t.emp, Date:t.date, Item:t.item, Qty:t.qty, Client:t.client, Note:t.note})) };
-      await fetch(TRAN_API,{ method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(transPayload)});
+    // --- Save stock: only unique items ---
+    for(const r of stockData){
+      if(!r.Item) continue;
+      const stockPayload = { data: [{ Item: r.Item, Added: r.Added, Delivered: r.Delivered, Available: r.Available }] };
+      await fetch(STOCK_API,{ method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(stockPayload) });
     }
-    alert("✅ Saved to Google Sheet!");
+
+    // --- Save transactions: only new ---
+    for(const t of transactions){
+      if(!t.saved){ // only unsaved
+        const transPayload = { data: [{ ID: t.id, Name: t.emp, Date: t.date, Item: t.item, Qty: t.qty, Client: t.client, Note: t.note }] };
+        await fetch(TRAN_API,{ method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(transPayload) });
+        t.saved = true; // mark as saved
+      }
+    }
+
+    alert("✅ Saved! Click 🔄 Refresh to see updates.");
   } catch(err){
     console.error(err); alert("❌ Failed to save. Check API & CORS.");
   }
@@ -161,10 +174,11 @@ async function loadData() {
     const stockRes = await fetch(STOCK_API);
     const stockJson = await stockRes.json();
     stockData = stockJson.map(r=>({Item:r.Item, Added:+r.Added, Delivered:+r.Delivered, Available:+r.Available}));
-    
+
     const transRes = await fetch(TRAN_API);
     const transJson = await transRes.json();
-    transactions = transJson.map(t=>({id:+t.ID, emp:t.Name, date:t.Date, item:t.Item, qty:+t.Qty, client:t.Client, note:t.Note}));
+    transactions = transJson.map(t=>({id:+t.ID, emp:t.Name, date:t.Date, item:t.Item, qty:+t.Qty, client:t.Client, note:t.Note, saved:true}));
+
   } catch(err){ console.error(err); }
   updateAvailable();
   renderStock();
