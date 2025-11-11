@@ -34,7 +34,7 @@ button { padding: 5px 10px; margin: 2px; }
 <h2>Stock Summary</h2>
 <table id="stockTable">
 <thead>
-<tr><th>RowNum</th><th>Item</th><th>Added</th><th>Delivered</th><th>Available</th></tr>
+<tr><th>RowNum</th><th>Item</th><th>Added</th><th>Delivered</th><th>Available</th><th>Action</th></tr>
 </thead>
 <tbody></tbody>
 </table>
@@ -55,7 +55,7 @@ button { padding: 5px 10px; margin: 2px; }
 
 <table id="transTable">
 <thead>
-<tr><th>RowNum</th><th>Iqama</th><th>Name</th><th>Date</th><th>Item</th><th>Qty</th><th>Client</th><th>Note</th></tr>
+<tr><th>RowNum</th><th>Iqama</th><th>Name</th><th>Date</th><th>Item</th><th>Qty</th><th>Client</th><th>Note</th><th>Action</th></tr>
 </thead>
 <tbody></tbody>
 </table>
@@ -84,7 +84,12 @@ function renderStock() {
   stockData.forEach((r,i) => {
     r.RowNum = i+1;
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${r.RowNum}</td><td>${r.Item}</td><td>${r.Added}</td><td>${r.Delivered}</td><td>${r.Available}</td>`;
+    tr.innerHTML = `<td>${r.RowNum}</td>
+      <td>${r.Item}</td>
+      <td>${r.Added}</td>
+      <td>${r.Delivered}</td>
+      <td>${r.Available}</td>
+      <td><button onclick="deleteStock(${i})">🗑 Delete</button></td>`;
     tbody.appendChild(tr);
   });
   renderItemSelect();
@@ -97,7 +102,7 @@ function renderTransactions() {
     t.RowNum = i+1;
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${t.RowNum}</td><td>${t.Iqama}</td><td>${t.Name}</td><td>${t.Date}</td><td>${t.Item}</td><td>${t.Qty}</td>
-    <td>${t.Client}</td><td>${t.Note}</td>`;
+    <td>${t.Client}</td><td>${t.Note}</td><td><button onclick="deleteTransaction(${i})">🗑 Delete</button></td>`;
     tbody.appendChild(tr);
   });
 }
@@ -118,7 +123,7 @@ document.getElementById('stockForm').onsubmit = async function(e){
 
   const existing = stockData.find(s=>s.Item === item);
   if(existing){
-    existing.Added += qty; // increment quantity
+    existing.Added += qty;
   } else {
     stockData.push({Item:item, Added:qty, Delivered:0, Available:qty});
   }
@@ -128,17 +133,7 @@ document.getElementById('stockForm').onsubmit = async function(e){
   document.getElementById('sItem').value='';
   document.getElementById('sQty').value='';
 
-  // Save stock immediately
-  const payload = { data: stockData.map(s => ({
-    RowNum: s.RowNum,
-    Item: s.Item,
-    Added: s.Added,
-    Delivered: s.Delivered,
-    Available: s.Available
-  }))};
-  try{
-    await fetch(STOCK_API, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
-  }catch(err){ console.error(err); }
+  await saveStock();
 };
 
 // --- Transaction Form ---
@@ -165,14 +160,44 @@ document.getElementById('entryForm').onsubmit = async function(e){
   renderTransactions();
   e.target.reset();
 
-  // Save transaction immediately
-  const payload = { data: [newTrans] };
-  try{ await fetch(TRAN_API, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)}); } 
-  catch(err){ console.error(err); }
-
-  // Auto refresh stock after transaction
-  renderStock();
+  await saveTransaction(newTrans);
 };
+
+// --- Delete Functions ---
+async function deleteStock(index){
+  const s = stockData.splice(index,1)[0];
+  renderStock();
+  try{
+    await fetch(STOCK_API, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({data: stockData}) });
+  }catch(err){ console.error(err); }
+}
+
+async function deleteTransaction(index){
+  transactions.splice(index,1);
+  updateAvailable();
+  renderStock();
+  renderTransactions();
+  try{
+    await fetch(TRAN_API, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({data: transactions}) });
+  }catch(err){ console.error(err); }
+}
+
+// --- Save Functions ---
+async function saveStock(){
+  try{
+    const payload = { data: stockData.map(s => ({
+      Item: s.Item, Added: s.Added, Delivered: s.Delivered, Available: s.Available
+    }))};
+    await fetch(STOCK_API, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
+  }catch(err){ console.error(err); }
+}
+
+async function saveTransaction(trans){
+  try{
+    const payload = { data: [trans] };
+    await fetch(TRAN_API, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
+  }catch(err){ console.error(err); }
+}
 
 // --- Load Data ---
 async function loadStockData() {
