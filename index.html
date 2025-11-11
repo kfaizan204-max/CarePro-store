@@ -66,7 +66,7 @@ let transactions = [];
 // --- Stock ---
 function updateAvailable() {
   stockData.forEach(item => {
-    const delivered = transactions.filter(t=>t.Item===item.Item).reduce((sum,t)=>sum+t.Qty,0);
+    const delivered = transactions.filter(t => t.Item === item.Item).reduce((sum, t) => sum + t.Qty, 0);
     item.Delivered = delivered;
     item.Available = (item.Added || 0) - delivered;
   });
@@ -75,8 +75,8 @@ function updateAvailable() {
 function renderStock() {
   const tbody = document.querySelector('#stockTable tbody');
   tbody.innerHTML = '';
-  stockData.forEach((r,i) => {
-    r.RowNum = i+1;
+  stockData.forEach((r, i) => {
+    r.RowNum = i + 1;
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${r.RowNum}</td>
       <td contenteditable="true">${r.Item||''}</td>
@@ -92,14 +92,14 @@ function addStockRow() { stockData.push({Item:'', Added:0, Delivered:0, Availabl
 function deleteStockRow() { stockData.pop(); renderStock(); }
 function renderItemSelect() {
   const sel = document.getElementById('itemSelect'); sel.innerHTML='';
-  stockData.forEach(r=>{ if(r.Item) sel.innerHTML += `<option>${r.Item}</option>`; });
+  stockData.forEach(r => { if(r.Item) sel.innerHTML += `<option>${r.Item}</option>`; });
 }
 
 // --- Transactions ---
 function renderTransactions() {
   const tbody = document.querySelector('#transTable tbody'); tbody.innerHTML='';
-  transactions.forEach((t,i) => {
-    t.RowNum = i+1;
+  transactions.forEach((t, i) => {
+    t.RowNum = i + 1;
     const tr = document.createElement('tr');
     tr.innerHTML=`<td>${t.RowNum}</td><td>${t.Iqama}</td><td>${t.Name}</td><td>${t.Date}</td><td>${t.Item}</td><td>${t.Qty}</td>
       <td>${t.Client}</td><td>${t.Note}</td>`;
@@ -111,11 +111,11 @@ document.getElementById('entryForm').onsubmit = function(e){
   e.preventDefault();
   const itemName = document.getElementById('itemSelect').value;
   const qty = parseInt(document.getElementById('qty').value);
-  const stockRow = stockData.find(s=>s.Item===itemName);
+  const stockRow = stockData.find(s => s.Item === itemName);
   if(!stockRow || stockRow.Available < qty){ alert("Not enough stock"); return; }
 
   // Auto RowNum
-  const newRowNum = transactions.length ? Math.max(...transactions.map(t=>t.RowNum)) + 1 : 1;
+  const newRowNum = transactions.length ? Math.max(...transactions.map(t => t.RowNum)) + 1 : 1;
 
   const newTrans = {
     RowNum: newRowNum,
@@ -138,32 +138,48 @@ document.getElementById('entryForm').onsubmit = function(e){
 // --- Save Everything ---
 async function saveEverything() {
   try {
-    // Save Stock
-    for(const s of stockData){
-      if(!s.Item) continue;
-      await fetch(STOCK_API,{
+    // --- Save Stock in ONE POST ---
+    const stockPayload = { data: stockData.map(r => ({
+      RowNum: r.RowNum,
+      Item: r.Item,
+      Added: r.Added,
+      Delivered: r.Delivered,
+      Available: r.Available
+    }))};
+    await fetch(STOCK_API, {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify(stockPayload)
+    });
+
+    // --- Save Transactions (unsaved only) ---
+    const unsavedTrans = transactions.filter(t => !t.saved);
+    if(unsavedTrans.length > 0){
+      const transPayload = { data: unsavedTrans.map(t => ({
+        RowNum: t.RowNum,
+        Iqama: t.Iqama,
+        Name: t.Name,
+        Date: t.Date,
+        Item: t.Item,
+        Qty: t.Qty,
+        Client: t.Client,
+        Note: t.Note
+      }))};
+      await fetch(TRAN_API, {
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({data:[s]})
+        body: JSON.stringify(transPayload)
       });
+      unsavedTrans.forEach(t => t.saved = true);
     }
 
-    // Save Transactions (only unsaved)
-    for(const t of transactions){
-      if(!t.saved){
-        await fetch(TRAN_API,{
-          method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body: JSON.stringify({data:[t]})
-        });
-        t.saved = true;
-      }
-    }
+    alert("✅ Saved! Auto-refreshing...");
+    await loadStockData(); // auto-refresh after save
 
-    alert("✅ Saved successfully!");
-    // Auto refresh after save
-    await loadStockData();
-  } catch(err){ console.error(err); alert("❌ Failed to save."); }
+  } catch(err){
+    console.error(err);
+    alert("❌ Failed to save. Check API & CORS.");
+  }
 }
 
 // --- Load Data ---
@@ -171,11 +187,28 @@ async function loadStockData() {
   try {
     const sRes = await fetch(STOCK_API);
     const sJson = await sRes.json();
-    stockData = sJson.map(r=>({Item:r.Item, Added:+r.Added, Delivered:+r.Delivered, Available:+r.Available}));
+    stockData = sJson.map(r => ({
+      RowNum: +r.RowNum,
+      Item: r.Item,
+      Added: +r.Added,
+      Delivered: +r.Delivered,
+      Available: +r.Available
+    }));
 
     const tRes = await fetch(TRAN_API);
     const tJson = await tRes.json();
-    transactions = tJson.map(t=>({RowNum:+t.RowNum, Iqama:t.Iqama, Name:t.Name, Date:t.Date, Item:t.Item, Qty:+t.Qty, Client:t.Client, Note:t.Note, saved:true}));
+    transactions = tJson.map(t => ({
+      RowNum: +t.RowNum,
+      Iqama: t.Iqama,
+      Name: t.Name,
+      Date: t.Date,
+      Item: t.Item,
+      Qty: +t.Qty,
+      Client: t.Client,
+      Note: t.Note,
+      saved: true
+    }));
+
   } catch(err){ console.error(err); }
   updateAvailable();
   renderStock();
