@@ -5,16 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Uniform Stock Manager</title>
 <style>
-:root { --blue1:#89f7fe; --blue2:#66a6ff; --text:#333; }
-body { font-family: sans-serif; margin:0; padding:0; background: linear-gradient(120deg,var(--blue1),var(--blue2)); background-size:400% 400%; animation: gradientBG 15s ease infinite; color: var(--text);}
+:root { --blue1:#89f7fe; --blue2:#66a6ff; }
+body { font-family:sans-serif; margin:0; padding:0; background:linear-gradient(120deg,var(--blue1),var(--blue2)); background-size:400% 400%; animation: gradientBG 15s ease infinite; color:#333;}
 @keyframes gradientBG{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
-header, section { padding: 15px 20px; background: rgba(255,255,255,0.85); backdrop-filter: blur(5px); margin:10px; border-radius:12px; }
-h1,h2 { margin:0 0 10px 0; }
-table { width: 100%; border-collapse: collapse; margin-top:10px; }
-th, td { border:1px solid #aaa; padding:5px; text-align:center; }
-input, select { width:100%; padding:5px; margin:2px 0; }
-button { padding:5px 10px; margin:2px; cursor:pointer; border:none; border-radius:5px; background: var(--blue2); color:#fff; transition:0.3s; }
-button:hover { background: var(--blue1); color:#000; }
+header, section { padding:15px; margin:10px; background: rgba(255,255,255,0.85); border-radius:10px; backdrop-filter: blur(5px);}
+table { width:100%; border-collapse:collapse; margin-top:10px;}
+th,td { border:1px solid #aaa; padding:5px; text-align:center;}
+input, select { width:100%; padding:5px; margin:2px 0;}
+button { padding:5px 10px; margin:2px; border:none; border-radius:5px; background:#66a6ff; color:#fff; cursor:pointer;}
+button:hover { background:#89f7fe; color:#000;}
 </style>
 </head>
 <body>
@@ -23,7 +22,7 @@ button:hover { background: var(--blue1); color:#000; }
 <h1>Uniform Stock Manager</h1>
 </header>
 
-<section id="stockSection">
+<section>
 <h2>Stock Summary</h2>
 <table id="stockTable">
 <thead>
@@ -31,10 +30,10 @@ button:hover { background: var(--blue1); color:#000; }
 </thead>
 <tbody></tbody>
 </table>
-<button onclick="saveStock()">💾 Save Stock Changes</button>
+<button onclick="saveStock()">💾 Save Stock</button>
 </section>
 
-<section id="transactionSection">
+<section>
 <h2>Transactions</h2>
 <form id="entryForm">
 <input type="text" id="iqama" placeholder="Iqama" required>
@@ -62,17 +61,17 @@ const TRAN_API = "https://sheetdb.io/api/v1/2y1u7hp9ykzlq?sheet=Transactions";
 let stockData = [];
 let transactions = [];
 
-// --- Update Available Stock ---
-function updateAvailable() {
+// --- Update Delivered & Available ---
+function updateAvailable(){
   stockData.forEach(item => {
-    const delivered = transactions.filter(t => t.Item === item.Item).reduce((sum,t)=>sum+t.Qty,0);
+    const delivered = transactions.filter(t=>t.Item===item.Item).reduce((sum,t)=>sum+t.Qty,0);
     item.Delivered = delivered;
-    item.Available = (item.Added || 0) - delivered;
+    item.Available = (item.Added||0) - delivered;
   });
 }
 
-// --- Render Stock Table ---
-function renderStock() {
+// --- Render stock ---
+function renderStock(){
   const tbody = document.querySelector('#stockTable tbody');
   tbody.innerHTML = '';
   stockData.forEach((r,i)=>{
@@ -89,27 +88,27 @@ function renderStock() {
 }
 
 // --- Render Transactions ---
-function renderTransactions() {
+function renderTransactions(){
   const tbody = document.querySelector('#transTable tbody');
-  tbody.innerHTML = '';
+  tbody.innerHTML='';
   transactions.forEach((t,i)=>{
     t.RowNum = i+1;
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${t.RowNum}</td><td>${t.Iqama}</td><td>${t.Name}</td><td>${t.Date}</td><td>${t.Item}</td><td>${t.Qty}</td>
+    tr.innerHTML=`<td>${t.RowNum}</td><td>${t.Iqama}</td><td>${t.Name}</td><td>${t.Date}</td><td>${t.Item}</td><td>${t.Qty}</td>
       <td>${t.Client}</td><td>${t.Note}</td>
       <td><button onclick="deleteTransaction(${i})">🗑 Delete</button></td>`;
     tbody.appendChild(tr);
   });
 }
 
-// --- Item select for transaction ---
-function renderItemSelect() {
+// --- Item select ---
+function renderItemSelect(){
   const sel = document.getElementById('itemSelect');
   sel.innerHTML='';
   stockData.forEach(r=>{ if(r.Item) sel.innerHTML += `<option>${r.Item}</option>`; });
 }
 
-// --- Transaction Form Submit ---
+// --- Transaction submit ---
 document.getElementById('entryForm').onsubmit = async function(e){
   e.preventDefault();
   const itemName = document.getElementById('itemSelect').value;
@@ -118,7 +117,6 @@ document.getElementById('entryForm').onsubmit = async function(e){
   if(!stockRow || stockRow.Available < qty){ alert("Not enough stock"); return; }
 
   const newTrans = {
-    RowNum: transactions.length ? Math.max(...transactions.map(t=>t.RowNum))+1 : 1,
     Iqama: document.getElementById('iqama').value,
     Name: document.getElementById('emp').value,
     Date: document.getElementById('date').value,
@@ -133,54 +131,40 @@ document.getElementById('entryForm').onsubmit = async function(e){
   renderTransactions();
   e.target.reset();
 
-  await saveTransaction(newTrans); // save immediately
+  await saveTransaction(newTrans);
+};
+
+// --- Save stock (PUT all rows to overwrite) ---
+async function saveStock(){
+  try{
+    updateAvailable();
+    const payload = { data: stockData.map(s=>({Item:s.Item, Added:+s.Added, Delivered:+s.Delivered, Available:+s.Available})) };
+    await fetch(STOCK_API,{method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
+    alert("✅ Stock saved!");
+    await loadData();
+  }catch(err){console.error(err); alert("❌ Failed to save stock.");}
+}
+
+// --- Save transaction (POST) ---
+async function saveTransaction(trans){
+  try{
+    await fetch(TRAN_API,{method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({data:[trans]})});
+    await loadData();
+  }catch(err){console.error(err);}
 }
 
 // --- Delete transaction ---
 async function deleteTransaction(index){
-  const t = transactions.splice(index,1)[0];
+  transactions.splice(index,1);
   updateAvailable();
   renderStock();
   renderTransactions();
-
   try{
-    // Delete in SheetDB: using PATCH to overwrite all transactions
-    await fetch(TRAN_API,{
-      method:"PUT",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({data:transactions})
-    });
-  }catch(err){ console.error(err); }
+    await fetch(TRAN_API,{method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify({data:transactions})});
+  }catch(err){console.error(err);}
 }
 
-// --- Save Stock (PATCH per Item) ---
-async function saveStock(){
-  for(const s of stockData){
-    if(!s.Item) continue;
-    try{
-      await fetch(`${STOCK_API}/Item/${encodeURIComponent(s.Item)}`, {
-        method:"PATCH",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({data:[{Added:+s.Added}]})
-      });
-    }catch(err){ console.error(err); }
-  }
-  alert("✅ Stock saved & updated!");
-  await loadData();
-}
-
-// --- Save Transaction (POST) ---
-async function saveTransaction(trans){
-  try{
-    await fetch(TRAN_API,{
-      method:"POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({data:[trans]})
-    });
-  }catch(err){ console.error(err); }
-}
-
-// --- Load Data from SheetDB ---
+// --- Load all data ---
 async function loadData(){
   try{
     const sRes = await fetch(STOCK_API);
@@ -189,15 +173,14 @@ async function loadData(){
 
     const tRes = await fetch(TRAN_API);
     const tJson = await tRes.json();
-    transactions = tJson.map(t=>({RowNum:+t.RowNum, Iqama:t.Iqama, Name:t.Name, Date:t.Date, Item:t.Item, Qty:+t.Qty, Client:t.Client, Note:t.Note}));
-
-  }catch(err){ console.error(err); }
+    transactions = tJson.map(t=>({Iqama:t.Iqama, Name:t.Name, Date:t.Date, Item:t.Item, Qty:+t.Qty, Client:t.Client, Note:t.Note}));
+  }catch(err){ console.error(err);}
   updateAvailable();
   renderStock();
   renderTransactions();
 }
 
-// Load page
+// Initial load
 loadData();
 </script>
 </body>
